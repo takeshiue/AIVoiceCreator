@@ -106,8 +106,8 @@ def generate_audio():
         filepath = os.path.join(AUDIO_DIR, filename)
         
         try:
-            # Use the correct speech generation API - trying gemini-2.5-pro-tts
-            model = genai.GenerativeModel("gemini-2.5-pro-tts")
+            # Use the correct speech generation API - trying gemini-2.5-pro-preview-tts
+            model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
             
             # Generate speech with proper request format
             response = model.generate_content(
