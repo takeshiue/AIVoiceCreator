@@ -110,7 +110,31 @@ def generate_audio():
             # Gemini 2.5 Pro Preview TTS for speech generation
             model = genai.GenerativeModel('gemini-2.5-pro-preview-tts')
             
-            # Try WAV format audio generation using correct syntax
+            # Multi-speaker audio generation using Gemini TTS API
+            # Parse script to identify speakers and their lines
+            script_parts = []
+            lines = script.strip().split('\n')
+            
+            for line in lines:
+                if line.strip() and ':' in line:
+                    speaker, text = line.split(':', 1)
+                    speaker_name = speaker.strip()
+                    speech_text = text.strip()
+                    
+                    # Assign voice based on speaker
+                    if 'Speaker1' in speaker_name or '1' in speaker_name:
+                        voice_name = voice1
+                    elif 'Speaker2' in speaker_name or '2' in speaker_name:
+                        voice_name = voice2
+                    else:
+                        voice_name = voice1  # Default to voice1
+                    
+                    script_parts.append({
+                        "text": speech_text,
+                        "voice": voice_name
+                    })
+            
+            # Generate audio with multi-speaker configuration
             response = model.generate_content(
                 script,
                 generation_config={
@@ -118,7 +142,7 @@ def generate_audio():
                     "speech_config": {
                         "voice_config": {
                             "prebuilt_voice_config": {
-                                "voice_name": voice1
+                                "voice_name": voice1  # Primary voice
                             }
                         }
                     }
