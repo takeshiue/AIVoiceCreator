@@ -101,41 +101,39 @@ def generate_audio():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。'}), 500
         
-        # Generate unique filename
+        # Generate unique filename - using WAV format
         timestamp = int(time.time())
-        filename = f"interview_{timestamp}.mp3"
+        filename = f"interview_{timestamp}.wav"
         filepath = os.path.join(AUDIO_DIR, filename)
         
         try:
-            # Google Gemini TTS APIの正しい実装方法を使用
-            # ドキュメント: https://ai.google.dev/gemini-api/docs/speech-generation
+            # Gemini 2.0 Flash with Thinking mode for speech generation
+            model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp')
             
-            # 音声生成用のモデルを使用
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            
-            # 音声生成のためのリクエストを作成
+            # Try WAV format audio generation
             response = model.generate_content(
                 script,
-                generation_config={
-                    "response_modalities": ["AUDIO"],
-                    "speech_config": {
+                generation_config=genai.GenerationConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config={
                         "voice_config": {
                             "prebuilt_voice_config": {
-                                "voice_name": voice1  # とりあえずSpeaker1の音声を使用
+                                "voice_name": voice1
                             }
                         }
                     }
-                }
+                )
             )
             
-            # レスポンスから音声データを抽出
+            # Extract audio data from response
             audio_data = None
             if hasattr(response, 'candidates') and response.candidates:
                 for candidate in response.candidates:
                     if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
                         for part in candidate.content.parts:
                             if hasattr(part, 'inline_data') and part.inline_data:
-                                if 'audio' in part.inline_data.mime_type:
+                                mime_type = getattr(part.inline_data, 'mime_type', '')
+                                if 'audio' in mime_type.lower():
                                     audio_data = base64.b64decode(part.inline_data.data)
                                     break
                     if audio_data:
@@ -143,9 +141,9 @@ def generate_audio():
             
             if not audio_data:
                 logger.error("No audio data found in response")
-                return jsonify({'error': '音声データの生成に失敗しました。'}), 500
+                return jsonify({'error': '音声データの生成に失敗しました。Gemini APIの音声生成機能が現在利用できない可能性があります。'}), 500
             
-            # 音声ファイルを保存
+            # Save audio file as WAV
             with open(filepath, 'wb') as f:
                 f.write(audio_data)
                 
