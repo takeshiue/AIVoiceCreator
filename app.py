@@ -116,16 +116,16 @@ def generate_audio():
             # 音声生成のためのリクエストを作成
             response = model.generate_content(
                 script,
-                generation_config=genai.GenerationConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=genai.types.SpeechConfig(
-                        voice_config=genai.types.VoiceConfig(
-                            prebuilt_voice_config=genai.types.PrebuiltVoiceConfig(
-                                voice_name=voice1  # とりあえずSpeaker1の音声を使用
-                            )
-                        )
-                    )
-                )
+                generation_config={
+                    "response_modalities": ["AUDIO"],
+                    "speech_config": {
+                        "voice_config": {
+                            "prebuilt_voice_config": {
+                                "voice_name": voice1  # とりあえずSpeaker1の音声を使用
+                            }
+                        }
+                    }
+                }
             )
             
             # レスポンスから音声データを抽出
