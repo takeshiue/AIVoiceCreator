@@ -72,19 +72,36 @@
                     rows="12"></textarea>
             </div>
             
-            <div class="controls-row">
-                <div class="form-group">
-                    <label for="voice_select" class="form-label">
-                        <i class="fas fa-user"></i> 音声モデル
-                    </label>
-                    <select id="voice_select" class="form-control">
-                        <option value="aoede">Aoede (英語・女性)</option>
-                        <option value="charon">Charon (英語・男性)</option>
-                        <option value="fenrir">Fenrir (英語・男性)</option>
-                        <option value="kore">Kore (英語・女性)</option>
-                    </select>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="voice_select_1" class="form-label">
+                            <i class="fas fa-user"></i> Speaker1 音声モデル
+                        </label>
+                        <select id="voice_select_1" class="form-control">
+                            <option value="aoede">Aoede (英語・女性)</option>
+                            <option value="charon">Charon (英語・男性)</option>
+                            <option value="fenrir">Fenrir (英語・男性)</option>
+                            <option value="kore">Kore (英語・女性)</option>
+                        </select>
+                    </div>
                 </div>
-                
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="voice_select_2" class="form-label">
+                            <i class="fas fa-user-friends"></i> Speaker2 音声モデル
+                        </label>
+                        <select id="voice_select_2" class="form-control">
+                            <option value="charon" selected>Charon (英語・男性)</option>
+                            <option value="aoede">Aoede (英語・女性)</option>
+                            <option value="fenrir">Fenrir (英語・男性)</option>
+                            <option value="kore">Kore (英語・女性)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls-row">
                 <div class="form-group">
                     <label for="speaking_rate_control" class="form-label">
                         <i class="fas fa-tachometer-alt"></i> 話し方速度

@@ -119,7 +119,8 @@ class InterviewGenerator {
             return;
         }
 
-        const voice = document.getElementById('voice_select').value;
+        const voice1 = document.getElementById('voice_select_1').value;
+        const voice2 = document.getElementById('voice_select_2').value;
         const rate = parseFloat(document.getElementById('speaking_rate_control').value);
         const button = document.getElementById('generate_audio_button');
         const originalText = button.textContent;
@@ -132,7 +133,7 @@ class InterviewGenerator {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ script, voice, rate })
+                body: JSON.stringify({ script, voice1, voice2, rate })
             });
             
             const data = await response.json();

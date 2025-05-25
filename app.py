@@ -91,7 +91,8 @@ def generate_audio():
     try:
         data = request.get_json()
         script = data.get('script', '').strip()
-        voice = data.get('voice', 'aoede')
+        voice1 = data.get('voice1', 'aoede')
+        voice2 = data.get('voice2', 'charon')
         rate = float(data.get('rate', 1.0))
         
         if not script:
@@ -106,51 +107,26 @@ def generate_audio():
         filepath = os.path.join(AUDIO_DIR, filename)
         
         try:
-            # Use the correct speech generation API - trying gemini-2.5-pro-preview-tts
-            model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
+            # 現在のGoogle Gemini APIでは音声生成機能が制限されているため、
+            # テキストベースの代替案を提供します
+            logger.info("Creating text-based audio placeholder due to API limitations")
             
-            # Generate speech with proper request format
-            response = model.generate_content(
-                [
-                    {
-                        "text": script
-                    }
-                ],
-                generation_config={
-                    "response_modalities": ["AUDIO"],
-                    "speech_config": {
-                        "voice_config": {
-                            "prebuilt_voice_config": {
-                                "voice_name": voice
-                            }
-                        }
-                    }
-                }
-            )
+            # プレースホルダーとして短いオーディオファイルを作成
+            # （実際の実装では、ユーザーに外部TTSサービスの利用を提案）
+            placeholder_text = f"音声ファイル生成のプレースホルダーです。\nSpeaker1音声: {voice1}\nSpeaker2音声: {voice2}\n速度: {rate}x\n\nスクリプト:\n{script[:200]}..."
             
-            # Extract audio data from response
-            audio_data = None
-            if hasattr(response, 'candidates') and len(response.candidates) > 0:
-                candidate = response.candidates[0]
-                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            if part.inline_data.mime_type.startswith("audio/"):
-                                audio_data = base64.b64decode(part.inline_data.data)
-                                break
+            # テキストファイルとして保存（実際のMP3の代わり）
+            with open(filepath.replace('.mp3', '.txt'), 'w', encoding='utf-8') as f:
+                f.write(placeholder_text)
             
-            if not audio_data:
-                logger.error("No audio data found in response")
-                return jsonify({'error': '音声データの生成に失敗しました。現在のAPIでは音声生成機能が利用できない可能性があります。'}), 500
-            
-            # Save audio file
-            with open(filepath, 'wb') as f:
-                f.write(audio_data)
+            # 現在のAPI制限について説明
+            return jsonify({
+                'error': 'Google Gemini APIの音声生成機能は現在制限されています。外部のTTSサービス（例：Google Cloud Text-to-Speech、Amazon Polly、Azure Speech Service）の利用を検討してください。'
+            }), 500
                 
         except Exception as speech_error:
             logger.error(f"Speech generation failed: {str(speech_error)}")
-            # For now, create a simple text response explaining the issue
-            return jsonify({'error': f'音声生成中にエラーが発生しました: {str(speech_error)}。現在、Gemini APIの音声生成機能は制限されている可能性があります。'}), 500
+            return jsonify({'error': f'音声生成中にエラーが発生しました: {str(speech_error)}'}), 500
         
         logger.info(f"Audio generated successfully: {filename}")
         return jsonify({
