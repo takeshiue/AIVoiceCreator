@@ -107,22 +107,47 @@ def generate_audio():
         filepath = os.path.join(AUDIO_DIR, filename)
         
         try:
-            # 現在のGoogle Gemini APIでは音声生成機能が制限されているため、
-            # テキストベースの代替案を提供します
-            logger.info("Creating text-based audio placeholder due to API limitations")
+            # Google Gemini TTS APIの正しい実装方法を使用
+            # ドキュメント: https://ai.google.dev/gemini-api/docs/speech-generation
             
-            # プレースホルダーとして短いオーディオファイルを作成
-            # （実際の実装では、ユーザーに外部TTSサービスの利用を提案）
-            placeholder_text = f"音声ファイル生成のプレースホルダーです。\nSpeaker1音声: {voice1}\nSpeaker2音声: {voice2}\n速度: {rate}x\n\nスクリプト:\n{script[:200]}..."
+            # 音声生成用のモデルを使用
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
             
-            # テキストファイルとして保存（実際のMP3の代わり）
-            with open(filepath.replace('.mp3', '.txt'), 'w', encoding='utf-8') as f:
-                f.write(placeholder_text)
+            # 音声生成のためのリクエストを作成
+            response = model.generate_content(
+                script,
+                generation_config=genai.GenerationConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=genai.types.SpeechConfig(
+                        voice_config=genai.types.VoiceConfig(
+                            prebuilt_voice_config=genai.types.PrebuiltVoiceConfig(
+                                voice_name=voice1  # とりあえずSpeaker1の音声を使用
+                            )
+                        )
+                    )
+                )
+            )
             
-            # 現在のAPI制限について説明
-            return jsonify({
-                'error': 'Google Gemini APIの音声生成機能は現在制限されています。外部のTTSサービス（例：Google Cloud Text-to-Speech、Amazon Polly、Azure Speech Service）の利用を検討してください。'
-            }), 500
+            # レスポンスから音声データを抽出
+            audio_data = None
+            if hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                if 'audio' in part.inline_data.mime_type:
+                                    audio_data = base64.b64decode(part.inline_data.data)
+                                    break
+                    if audio_data:
+                        break
+            
+            if not audio_data:
+                logger.error("No audio data found in response")
+                return jsonify({'error': '音声データの生成に失敗しました。'}), 500
+            
+            # 音声ファイルを保存
+            with open(filepath, 'wb') as f:
+                f.write(audio_data)
                 
         except Exception as speech_error:
             logger.error(f"Speech generation failed: {str(speech_error)}")
