@@ -100,49 +100,57 @@ def generate_audio():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。'}), 500
         
-        # Initialize TTS model - using Gemini 2.5 Pro TTS as requested
-        model = genai.GenerativeModel("gemini-2.5-pro-tts")
-        
         # Generate unique filename
         timestamp = int(time.time())
         filename = f"interview_{timestamp}.mp3"
         filepath = os.path.join(AUDIO_DIR, filename)
         
-        # Generate speech
-        response = model.generate_content(
-            script,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="audio/mp3"
-            )
-        )
-        
-        # Save audio data
-        if hasattr(response, 'audio') and response.audio:
-            # If response has audio attribute
-            with open(filepath, 'wb') as f:
-                f.write(response.audio)
-        elif hasattr(response, '_result') and hasattr(response._result, 'audio'):
-            # Alternative access method
-            with open(filepath, 'wb') as f:
-                f.write(response._result.audio)
-        else:
-            # Fallback: try to extract audio from parts
-            audio_data = None
-            for part in response.parts:
-                if hasattr(part, 'audio') and part.audio:
-                    audio_data = part.audio
-                    break
-                elif hasattr(part, 'inline_data') and part.inline_data:
-                    if part.inline_data.mime_type == "audio/mp3":
-                        audio_data = base64.b64decode(part.inline_data.data)
-                        break
+        try:
+            # Use the correct speech generation API
+            model = genai.GenerativeModel("gemini-2.0-flash-exp")
             
-            if audio_data:
-                with open(filepath, 'wb') as f:
-                    f.write(audio_data)
-            else:
+            # Generate speech with proper request format
+            response = model.generate_content(
+                [
+                    {
+                        "text": script
+                    }
+                ],
+                generation_config={
+                    "response_modalities": ["AUDIO"],
+                    "speech_config": {
+                        "voice_config": {
+                            "prebuilt_voice_config": {
+                                "voice_name": voice
+                            }
+                        }
+                    }
+                }
+            )
+            
+            # Extract audio data from response
+            audio_data = None
+            if hasattr(response, 'candidates') and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            if part.inline_data.mime_type.startswith("audio/"):
+                                audio_data = base64.b64decode(part.inline_data.data)
+                                break
+            
+            if not audio_data:
                 logger.error("No audio data found in response")
-                return jsonify({'error': '音声データの生成に失敗しました。'}), 500
+                return jsonify({'error': '音声データの生成に失敗しました。現在のAPIでは音声生成機能が利用できない可能性があります。'}), 500
+            
+            # Save audio file
+            with open(filepath, 'wb') as f:
+                f.write(audio_data)
+                
+        except Exception as speech_error:
+            logger.error(f"Speech generation failed: {str(speech_error)}")
+            # For now, create a simple text response explaining the issue
+            return jsonify({'error': f'音声生成中にエラーが発生しました: {str(speech_error)}。現在、Gemini APIの音声生成機能は制限されている可能性があります。'}), 500
         
         logger.info(f"Audio generated successfully: {filename}")
         return jsonify({
