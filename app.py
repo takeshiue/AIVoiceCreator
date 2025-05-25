@@ -45,8 +45,8 @@ def generate_script():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。環境変数 GOOGLE_API_KEY を設定してください。'}), 500
         
-        # Initialize Gemini model
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        # Initialize Gemini model - using Gemini 2.5 Pro as requested
+        model = genai.GenerativeModel('gemini-2.5-pro')
         
         # Create effective prompt for interview script generation
         prompt = f"""あなたはプロの放送作家です。以下の構成案に基づいて、自然で魅力的なインタビューのトークスクリプトを Speaker1 と Speaker2 の対話形式で作成してください。
@@ -100,8 +100,8 @@ def generate_audio():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。'}), 500
         
-        # Initialize TTS model
-        model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        # Initialize TTS model - using Gemini 2.5 Pro TTS as requested
+        model = genai.GenerativeModel("gemini-2.5-pro-tts")
         
         # Generate unique filename
         timestamp = int(time.time())
