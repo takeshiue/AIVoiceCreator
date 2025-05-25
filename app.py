@@ -110,19 +110,19 @@ def generate_audio():
             # Gemini 2.0 Flash with Thinking mode for speech generation
             model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp')
             
-            # Try WAV format audio generation
+            # Try WAV format audio generation using correct syntax
             response = model.generate_content(
                 script,
-                generation_config=genai.GenerationConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config={
+                generation_config={
+                    "response_modalities": ["AUDIO"],
+                    "speech_config": {
                         "voice_config": {
                             "prebuilt_voice_config": {
                                 "voice_name": voice1
                             }
                         }
                     }
-                )
+                }
             )
             
             # Extract audio data from response
