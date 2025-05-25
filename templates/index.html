@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI インタビュー ジェネレーター</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1><i class="fas fa-microphone-alt"></i> AI インタビュー ジェネレーター</h1>
+            <p>Google Gemini 2.5 Pro を活用して、自然なインタビュースクリプトを生成し、高品質な音声に変換できるWebアプリケーションです。</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <!-- Step 1: Constitution Input -->
+        <div class="step-card">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2 class="step-title">構成案入力</h2>
+            </div>
+            <p class="step-description">
+                インタビューの構成案を自由に入力してください。話者の名前や話題の流れを箇条書きで記述すると、より自然なスクリプトが生成されます。
+            </p>
+            
+            <div class="form-group">
+                <label for="constitution_input" class="form-label">
+                    <i class="fas fa-edit"></i> 構成案
+                </label>
+                <textarea 
+                    id="constitution_input" 
+                    class="form-control large" 
+                    placeholder="例：&#10;田中さんと佐藤さんの挨拶から始まる&#10;佐藤さんが、AIの話を始める&#10;田中さんが、AIの進化について質問する&#10;佐藤さんが、具体的な事例を挙げて説明する&#10;最後に田中さんがまとめる"
+                    rows="8"></textarea>
+            </div>
+            
+            <button id="generate_script_button" class="btn btn-primary">
+                <i class="fas fa-magic"></i> トーク生成 (Ctrl+Enter)
+            </button>
+        </div>
+
+        <!-- Step 2: Script Editing and Audio Settings -->
+        <div class="step-card">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2 class="step-title">スクリプト編集と音声設定</h2>
+            </div>
+            <p class="step-description">
+                生成されたスクリプトです。自由に編集し、音声設定を選択してください。
+            </p>
+            
+            <div class="form-group">
+                <label for="script_display_edit_area" class="form-label">
+                    <i class="fas fa-file-alt"></i> トークスクリプト
+                </label>
+                <textarea 
+                    id="script_display_edit_area" 
+                    class="form-control large" 
+                    placeholder="ここに生成されたスクリプトが表示されます。自由に編集可能です。"
+                    rows="12"></textarea>
+            </div>
+            
+            <div class="controls-row">
+                <div class="form-group">
+                    <label for="voice_select" class="form-label">
+                        <i class="fas fa-user"></i> 音声モデル
+                    </label>
+                    <select id="voice_select" class="form-control">
+                        <option value="aoede">Aoede (英語・女性)</option>
+                        <option value="charon">Charon (英語・男性)</option>
+                        <option value="fenrir">Fenrir (英語・男性)</option>
+                        <option value="kore">Kore (英語・女性)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="speaking_rate_control" class="form-label">
+                        <i class="fas fa-tachometer-alt"></i> 話し方速度
+                    </label>
+                    <select id="speaking_rate_control" class="form-control">
+                        <option value="0.8">ゆっくり (0.8x)</option>
+                        <option value="1.0" selected>普通 (1.0x)</option>
+                        <option value="1.2">早く (1.2x)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">&nbsp;</label>
+                    <button id="generate_audio_button" class="btn btn-primary">
+                        <i class="fas fa-volume-up"></i> 音声生成
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Audio Playback -->
+        <div class="step-card">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2 class="step-title">音声確認</h2>
+            </div>
+            <p class="step-description">
+                生成された音声です。ブラウザで再生したり、MP3ファイルとしてダウンロードできます。
+            </p>
+            
+            <div class="audio-section">
+                <audio 
+                    id="audio_player" 
+                    class="audio-player" 
+                    controls 
+                    style="display: none;">
+                    お使いのブラウザは音声再生に対応していません。
+                </audio>
+                
+                <div class="download-section">
+                    <button 
+                        id="download_audio_button" 
+                        class="btn btn-success hidden" 
+                        disabled>
+                        <i class="fas fa-download"></i> 音声をダウンロード
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-4 mt-5" style="background: hsl(var(--background)); border-top: 1px solid hsl(var(--border));">
+        <div class="container">
+            <p class="text-muted mb-0">
+                <i class="fas fa-robot"></i> Powered by Google Gemini 2.5 Pro & Gemini TTS
+                <span class="mx-2">|</span>
+                <i class="fas fa-code"></i> Built with Flask & Bootstrap
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
