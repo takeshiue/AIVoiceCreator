@@ -92,11 +92,14 @@ def generate_script():
 def generate_audio():
     """Generate audio using Gemini TTS"""
     try:
+        logger.info("=== Starting audio generation ===")
         data = request.get_json()
+        logger.info(f"Request data: {data}")
         script = data.get('script', '').strip()
         voice1 = data.get('voice1', 'aoede')
         voice2 = data.get('voice2', 'charon')
         rate = float(data.get('rate', 1.0))
+        logger.info(f"Script length: {len(script)}, Voice1: {voice1}, Voice2: {voice2}")
         
         if not script:
             return jsonify({'error': 'スクリプトを入力してください。'}), 400
