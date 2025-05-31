@@ -155,7 +155,15 @@ def generate_audio():
                 )
                 logger.info(f"Audio generation API response type: {type(response)}")
             except Exception as tts_error:
-                logger.error(f"TTS API error: {str(tts_error)}")
+                error_msg = f"TTS API error: {str(tts_error)}"
+                logger.error(error_msg)
+                # Log full error details to file for debugging
+                with open('tts_error.log', 'a') as f:
+                    import traceback
+                    f.write(f"\n=== TTS Error at {time.time()} ===\n")
+                    f.write(f"Error: {str(tts_error)}\n")
+                    f.write(f"Traceback:\n{traceback.format_exc()}\n")
+                    f.write("=====================================\n")
                 return jsonify({'error': f'音声生成エラー: {str(tts_error)}'}), 500
             
             # Extract audio data from response
