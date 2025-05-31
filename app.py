@@ -62,15 +62,20 @@ def generate_script():
 トークスクリプト:"""
 
         # Generate content using Google Gen AI
-        response = client.models.generate_content(
-            model='gemini-2.5-flash-preview-05-20',
-            contents=prompt_text,
-            config={
-                'temperature': 0.7,
-                'top_p': 0.8,
-                'max_output_tokens': 2048
-            }
-        )
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash-preview-05-20',
+                contents=prompt_text,
+                config={
+                    'temperature': 0.7,
+                    'top_p': 0.8,
+                    'max_output_tokens': 2048
+                }
+            )
+            logger.info(f"Script generation API response: {type(response)}")
+        except Exception as api_error:
+            logger.error(f"Script generation API error: {str(api_error)}")
+            return jsonify({'error': f'スクリプト生成エラー: {str(api_error)}'}), 500
         
         if response.text:
             logger.info("Script generated successfully")
@@ -132,20 +137,25 @@ def generate_audio():
                     })
             
             # Generate audio using Google Gen AI TTS
-            response = client.models.generate_content(
-                model='gemini-2.5-pro-preview-tts',
-                contents=script,
-                config={
-                    "response_modalities": ["AUDIO"],
-                    "speech_config": {
-                        "voice_config": {
-                            "prebuilt_voice_config": {
-                                "voice_name": voice1
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.5-pro-preview-tts',
+                    contents=script,
+                    config={
+                        "response_modalities": ["AUDIO"],
+                        "speech_config": {
+                            "voice_config": {
+                                "prebuilt_voice_config": {
+                                    "voice_name": voice1
+                                }
                             }
                         }
                     }
-                }
-            )
+                )
+                logger.info(f"Audio generation API response type: {type(response)}")
+            except Exception as tts_error:
+                logger.error(f"TTS API error: {str(tts_error)}")
+                return jsonify({'error': f'音声生成エラー: {str(tts_error)}'}), 500
             
             # Extract audio data from response
             audio_data = None
