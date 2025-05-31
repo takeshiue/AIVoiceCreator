@@ -104,6 +104,9 @@ def generate_audio():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。'}), 500
         
+        # Initialize client for this request
+        tts_client = genai.Client(api_key=GOOGLE_API_KEY)
+        
         # Generate unique filename - using WAV format
         timestamp = int(time.time())
         filename = f"interview_{timestamp}.wav"
@@ -138,7 +141,7 @@ def generate_audio():
             
             # Generate audio using Google Gen AI TTS
             try:
-                response = client.models.generate_content(
+                response = tts_client.models.generate_content(
                     model='gemini-2.5-flash-preview-tts',
                     contents=script,
                     config={
