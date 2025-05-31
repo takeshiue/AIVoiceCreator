@@ -31,35 +31,13 @@ else:
 AUDIO_DIR = os.path.join('static', 'audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-def pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16):
-    """Convert PCM data to WAV format with proper headers"""
-    # Calculate data size
-    data_size = len(pcm_data)
-    
-    # Create WAV file in memory
-    wav_buffer = io.BytesIO()
-    
-    # Write WAV header
-    wav_buffer.write(b'RIFF')
-    wav_buffer.write(struct.pack('<L', data_size + 36))  # File size - 8
-    wav_buffer.write(b'WAVE')
-    
-    # Write format chunk
-    wav_buffer.write(b'fmt ')
-    wav_buffer.write(struct.pack('<L', 16))  # Format chunk size
-    wav_buffer.write(struct.pack('<H', 1))   # PCM format
-    wav_buffer.write(struct.pack('<H', channels))  # Number of channels
-    wav_buffer.write(struct.pack('<L', sample_rate))  # Sample rate
-    wav_buffer.write(struct.pack('<L', sample_rate * channels * bits_per_sample // 8))  # Byte rate
-    wav_buffer.write(struct.pack('<H', channels * bits_per_sample // 8))  # Block align
-    wav_buffer.write(struct.pack('<H', bits_per_sample))  # Bits per sample
-    
-    # Write data chunk
-    wav_buffer.write(b'data')
-    wav_buffer.write(struct.pack('<L', data_size))
-    wav_buffer.write(pcm_data)
-    
-    return wav_buffer.getvalue()
+def save_wave_file(filename, pcm_data, channels=1, rate=24000, sample_width=2):
+    """Save PCM data as WAV file using the wave library"""
+    with wave.open(filename, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(rate)
+        wf.writeframes(pcm_data)
 
 @app.route('/')
 def index():
@@ -230,8 +208,9 @@ def generate_audio():
                                                 data_size = len(getattr(part.inline_data, 'data', ''))
                                                 logger.info(f"MIME type: {mime_type}, Data size: {data_size}")
                                                 if 'audio' in mime_type.lower() and data_size > 0:
-                                                    audio_data = base64.b64decode(part.inline_data.data)
-                                                    logger.info(f"Decoded audio data size: {len(audio_data)} bytes")
+                                                    # Get the raw data directly (already bytes from Gemini)
+                                                    audio_data = part.inline_data.data
+                                                    logger.info(f"Raw audio data size: {len(audio_data)} bytes")
                                                     audio_chunks.append(audio_data)
                                                     break
                                         if audio_chunks and len(audio_chunks) > len(audio_chunks) - 1:
@@ -250,13 +229,9 @@ def generate_audio():
             pcm_data = b''.join(audio_chunks)
             logger.info(f"Generated {len(audio_chunks)} audio chunks, total PCM size: {len(pcm_data)} bytes")
             
-            # Convert PCM to WAV format
-            wav_data = pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16)
-            logger.info(f"Converted to WAV format, final size: {len(wav_data)} bytes")
-            
-            # Save audio file as WAV
-            with open(filepath, 'wb') as f:
-                f.write(wav_data)
+            # Save as WAV file using the wave library
+            save_wave_file(filepath, pcm_data, channels=1, rate=24000, sample_width=2)
+            logger.info(f"Saved WAV file: {filepath}")
                 
         except Exception as speech_error:
             logger.error(f"Speech generation failed: {str(speech_error)}")
