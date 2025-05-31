@@ -147,45 +147,58 @@ def generate_audio():
                         "voice": voice_name
                     })
             
-            # Generate audio using Google Gen AI TTS
-            try:
-                response = tts_client.models.generate_content(
-                    model='models/gemini-2.5-flash-preview-tts',
-                    contents=script,
-                    config={
-                        "response_modalities": ["AUDIO"]
-                    }
-                )
-                logger.info(f"Audio generation API response type: {type(response)}")
-            except Exception as tts_error:
-                error_msg = f"TTS API error: {str(tts_error)}"
-                logger.error(error_msg)
-                # Log full error details to file for debugging
-                with open('tts_error.log', 'a') as f:
-                    import traceback
-                    f.write(f"\n=== TTS Error at {time.time()} ===\n")
-                    f.write(f"Error: {str(tts_error)}\n")
-                    f.write(f"Traceback:\n{traceback.format_exc()}\n")
-                    f.write("=====================================\n")
-                return jsonify({'error': f'音声生成エラー: {str(tts_error)}'}), 500
+            # Split script into smaller chunks for TTS
+            lines = script.strip().split('\n')
+            audio_chunks = []
             
-            # Extract audio data from response
-            audio_data = None
-            if hasattr(response, 'candidates') and response.candidates:
-                for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data:
-                                mime_type = getattr(part.inline_data, 'mime_type', '')
-                                if 'audio' in mime_type.lower():
-                                    audio_data = base64.b64decode(part.inline_data.data)
+            for line in lines:
+                if line.strip() and ':' in line:
+                    speaker, text = line.split(':', 1)
+                    text = text.strip()
+                    
+                    # Skip empty text
+                    if not text:
+                        continue
+                    
+                    # Limit text length to prevent timeout
+                    if len(text) > 200:
+                        text = text[:200] + "..."
+                    
+                    logger.info(f"Processing line: {speaker}: {text[:50]}...")
+                    
+                    try:
+                        # Generate audio for each line separately
+                        response = tts_client.models.generate_content(
+                            model='models/gemini-2.5-flash-preview-tts',
+                            contents=text,
+                            config={
+                                "response_modalities": ["AUDIO"]
+                            }
+                        )
+                        
+                        # Extract audio data from this chunk
+                        if hasattr(response, 'candidates') and response.candidates:
+                            for candidate in response.candidates:
+                                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                                    for part in candidate.content.parts:
+                                        if hasattr(part, 'inline_data') and part.inline_data:
+                                            mime_type = getattr(part.inline_data, 'mime_type', '')
+                                            if 'audio' in mime_type.lower():
+                                                audio_chunks.append(base64.b64decode(part.inline_data.data))
+                                                break
+                                if audio_chunks:
                                     break
-                    if audio_data:
-                        break
+                    except Exception as chunk_error:
+                        logger.warning(f"Failed to generate audio for chunk: {str(chunk_error)}")
+                        continue
             
-            if not audio_data:
-                logger.error("No audio data found in response")
-                return jsonify({'error': '音声データの生成に失敗しました。Gemini APIの音声生成機能が現在利用できない可能性があります。'}), 500
+            if not audio_chunks:
+                logger.error("No audio chunks generated")
+                return jsonify({'error': '音声データの生成に失敗しました。'}), 500
+            
+            # Combine all audio chunks
+            audio_data = b''.join(audio_chunks)
+            logger.info(f"Generated {len(audio_chunks)} audio chunks, total size: {len(audio_data)} bytes")
             
             # Save audio file as WAV
             with open(filepath, 'wb') as f:
