@@ -43,14 +43,11 @@ def generate_script():
         if not constitution:
             return jsonify({'error': '構成案を入力してください。'}), 400
         
-        if not GOOGLE_API_KEY:
+        if not client:
             return jsonify({'error': 'Google API キーが設定されていません。環境変数 GOOGLE_API_KEY を設定してください。'}), 500
         
-        # Initialize Gemini model - using Gemini 2.5 Flash Preview
-        model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
-        
         # Create effective prompt for interview script generation
-        prompt = f"""あなたはプロの放送作家です。以下の構成案に基づいて、自然で魅力的なインタビューのトークスクリプトを Speaker1 と Speaker2 の対話形式で作成してください。
+        prompt_text = f"""あなたはプロの放送作家です。以下の構成案に基づいて、自然で魅力的なインタビューのトークスクリプトを Speaker1 と Speaker2 の対話形式で作成してください。
 
 重要な指示：
 - 必ず「Speaker1:」「Speaker2:」の形式で話者を明記してください
@@ -64,15 +61,15 @@ def generate_script():
 
 トークスクリプト:"""
 
-        # Generate content
-        response = model.generate_content(
-            prompt,
-            generation_config=GenerationConfig(
-                temperature=0.7,
-                top_p=0.8,
-                top_k=40,
-                max_output_tokens=2048
-            )
+        # Generate content using Google Gen AI
+        response = client.models.generate_content(
+            model='gemini-2.5-flash-preview-05-20',
+            contents=prompt_text,
+            config={
+                'temperature': 0.7,
+                'top_p': 0.8,
+                'max_output_tokens': 2048
+            }
         )
         
         if response.text:
@@ -108,10 +105,9 @@ def generate_audio():
         filepath = os.path.join(AUDIO_DIR, filename)
         
         try:
-            # Gemini 2.5 Pro Preview TTS for speech generation
-            model = genai.GenerativeModel('gemini-2.5-pro-preview-tts')
+            # Generate audio using Google Gen AI TTS
             
-            # Multi-speaker audio generation using Gemini TTS API
+            # Multi-speaker audio generation using Google Gen AI TTS
             # Parse script to identify speakers and their lines
             script_parts = []
             lines = script.strip().split('\n')
@@ -135,15 +131,16 @@ def generate_audio():
                         "voice": voice_name
                     })
             
-            # Generate audio with multi-speaker configuration
-            response = model.generate_content(
-                script,
-                generation_config={
+            # Generate audio using Google Gen AI TTS
+            response = client.models.generate_content(
+                model='gemini-2.5-pro-preview-tts',
+                contents=script,
+                config={
                     "response_modalities": ["AUDIO"],
                     "speech_config": {
                         "voice_config": {
                             "prebuilt_voice_config": {
-                                "voice_name": voice1  # Primary voice
+                                "voice_name": voice1
                             }
                         }
                     }
