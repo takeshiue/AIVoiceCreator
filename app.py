@@ -142,14 +142,7 @@ def generate_audio():
                     model='gemini-2.5-flash-preview-tts',
                     contents=script,
                     config={
-                        "response_modalities": ["AUDIO"],
-                        "speech_config": {
-                            "voice_config": {
-                                "prebuilt_voice_config": {
-                                    "voice_name": voice1
-                                }
-                            }
-                        }
+                        "response_modalities": ["AUDIO"]
                     }
                 )
                 logger.info(f"Audio generation API response type: {type(response)}")
