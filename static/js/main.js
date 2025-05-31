@@ -103,7 +103,8 @@ class InterviewGenerator {
             }
         } catch (error) {
             console.error('Script generation error:', error);
-            this.showAlert(`エラー: ${error.message}`, 'error');
+            console.error('Error details:', error.stack);
+            this.showAlert(`スクリプト生成エラー: ${error.message}`, 'error');
         } finally {
             this.setButtonLoading(button, originalText, false);
         }
