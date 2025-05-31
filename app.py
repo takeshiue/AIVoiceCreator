@@ -177,17 +177,34 @@ def generate_audio():
                         )
                         
                         # Extract audio data from this chunk
+                        logger.info(f"Response type: {type(response)}")
+                        logger.info(f"Response attributes: {dir(response)}")
+                        
+                        # Check if response has audio data
                         if hasattr(response, 'candidates') and response.candidates:
-                            for candidate in response.candidates:
-                                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                                    for part in candidate.content.parts:
-                                        if hasattr(part, 'inline_data') and part.inline_data:
-                                            mime_type = getattr(part.inline_data, 'mime_type', '')
-                                            if 'audio' in mime_type.lower():
-                                                audio_chunks.append(base64.b64decode(part.inline_data.data))
-                                                break
-                                if audio_chunks:
-                                    break
+                            logger.info(f"Found {len(response.candidates)} candidates")
+                            for i, candidate in enumerate(response.candidates):
+                                logger.info(f"Candidate {i} attributes: {dir(candidate)}")
+                                if hasattr(candidate, 'content') and candidate.content:
+                                    logger.info(f"Content attributes: {dir(candidate.content)}")
+                                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                                        logger.info(f"Found {len(candidate.content.parts)} parts")
+                                        for j, part in enumerate(candidate.content.parts):
+                                            logger.info(f"Part {j} attributes: {dir(part)}")
+                                            if hasattr(part, 'inline_data') and part.inline_data:
+                                                logger.info(f"Inline data attributes: {dir(part.inline_data)}")
+                                                mime_type = getattr(part.inline_data, 'mime_type', '')
+                                                data_size = len(getattr(part.inline_data, 'data', ''))
+                                                logger.info(f"MIME type: {mime_type}, Data size: {data_size}")
+                                                if 'audio' in mime_type.lower() and data_size > 0:
+                                                    audio_data = base64.b64decode(part.inline_data.data)
+                                                    logger.info(f"Decoded audio data size: {len(audio_data)} bytes")
+                                                    audio_chunks.append(audio_data)
+                                                    break
+                                        if audio_chunks and len(audio_chunks) > len(audio_chunks) - 1:
+                                            break
+                        else:
+                            logger.warning(f"No candidates found in response or response format unexpected")
                     except Exception as chunk_error:
                         logger.warning(f"Failed to generate audio for chunk: {str(chunk_error)}")
                         continue
