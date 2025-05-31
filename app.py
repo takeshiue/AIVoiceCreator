@@ -139,7 +139,7 @@ def generate_audio():
             # Generate audio using Google Gen AI TTS
             try:
                 response = client.models.generate_content(
-                    model='gemini-2.5-pro-preview-tts',
+                    model='gemini-2.5-flash-preview-tts',
                     contents=script,
                     config={
                         "response_modalities": ["AUDIO"],
