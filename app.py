@@ -3,6 +3,9 @@ import json
 import logging
 import time
 import base64
+import struct
+import wave
+import io
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import google.genai as genai
 # Remove old import since we're using google.genai now
@@ -27,6 +30,36 @@ else:
 # Ensure audio directory exists
 AUDIO_DIR = os.path.join('static', 'audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+def pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16):
+    """Convert PCM data to WAV format with proper headers"""
+    # Calculate data size
+    data_size = len(pcm_data)
+    
+    # Create WAV file in memory
+    wav_buffer = io.BytesIO()
+    
+    # Write WAV header
+    wav_buffer.write(b'RIFF')
+    wav_buffer.write(struct.pack('<L', data_size + 36))  # File size - 8
+    wav_buffer.write(b'WAVE')
+    
+    # Write format chunk
+    wav_buffer.write(b'fmt ')
+    wav_buffer.write(struct.pack('<L', 16))  # Format chunk size
+    wav_buffer.write(struct.pack('<H', 1))   # PCM format
+    wav_buffer.write(struct.pack('<H', channels))  # Number of channels
+    wav_buffer.write(struct.pack('<L', sample_rate))  # Sample rate
+    wav_buffer.write(struct.pack('<L', sample_rate * channels * bits_per_sample // 8))  # Byte rate
+    wav_buffer.write(struct.pack('<H', channels * bits_per_sample // 8))  # Block align
+    wav_buffer.write(struct.pack('<H', bits_per_sample))  # Bits per sample
+    
+    # Write data chunk
+    wav_buffer.write(b'data')
+    wav_buffer.write(struct.pack('<L', data_size))
+    wav_buffer.write(pcm_data)
+    
+    return wav_buffer.getvalue()
 
 @app.route('/')
 def index():
@@ -213,13 +246,17 @@ def generate_audio():
                 logger.error("No audio chunks generated")
                 return jsonify({'error': '音声データの生成に失敗しました。'}), 500
             
-            # Combine all audio chunks
-            audio_data = b''.join(audio_chunks)
-            logger.info(f"Generated {len(audio_chunks)} audio chunks, total size: {len(audio_data)} bytes")
+            # Combine all audio chunks (PCM data)
+            pcm_data = b''.join(audio_chunks)
+            logger.info(f"Generated {len(audio_chunks)} audio chunks, total PCM size: {len(pcm_data)} bytes")
+            
+            # Convert PCM to WAV format
+            wav_data = pcm_to_wav(pcm_data, sample_rate=24000, channels=1, bits_per_sample=16)
+            logger.info(f"Converted to WAV format, final size: {len(wav_data)} bytes")
             
             # Save audio file as WAV
             with open(filepath, 'wb') as f:
-                f.write(audio_data)
+                f.write(wav_data)
                 
         except Exception as speech_error:
             logger.error(f"Speech generation failed: {str(speech_error)}")
