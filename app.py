@@ -4,8 +4,8 @@ import logging
 import time
 import base64
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import google.generativeai as genai
-from google.generativeai.types import GenerationConfig
+import google.genai as genai
+# Remove old import since we're using google.genai now
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
 
-# Configure Google API
+# Configure Google Gen AI client
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+    client = genai.Client(api_key=GOOGLE_API_KEY)
     logger.info("Google AI configured successfully")
 else:
     logger.warning("GOOGLE_API_KEY not found in environment variables")
+    client = None
 
 # Ensure audio directory exists
 AUDIO_DIR = os.path.join('static', 'audio')
