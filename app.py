@@ -118,10 +118,14 @@ def generate_audio():
         if not GOOGLE_API_KEY:
             return jsonify({'error': 'Google API キーが設定されていません。'}), 500
         
-        # Initialize client for this request
+        # Initialize client for this request with extended timeout
         try:
-            tts_client = genai.Client(api_key=GOOGLE_API_KEY)
-            logger.info("TTS client initialized successfully")
+            from google.genai.types import HttpOptions
+            tts_client = genai.Client(
+                api_key=GOOGLE_API_KEY,
+                http_options=HttpOptions(timeout=180)  # 180秒（3分）タイムアウト
+            )
+            logger.info("TTS client initialized successfully with 180s timeout")
         except Exception as client_error:
             logger.error(f"Failed to initialize TTS client: {str(client_error)}")
             return jsonify({'error': f'TTSクライアントの初期化に失敗しました: {str(client_error)}'}), 500
