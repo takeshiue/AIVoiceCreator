@@ -158,79 +158,75 @@ def generate_audio():
                         "voice": voice_name
                     })
             
-            # Split script into smaller chunks for TTS
-            lines = script.strip().split('\n')
-            audio_chunks = []
+            # Generate audio using multi-speaker configuration
+            logger.info(f"Generating audio with voices: Speaker1={voice1}, Speaker2={voice2}")
             
-            for line in lines:
-                if line.strip() and ':' in line:
-                    speaker, text = line.split(':', 1)
-                    text = text.strip()
-                    
-                    # Skip empty text
-                    if not text:
-                        continue
-                    
-                    # Limit text length to prevent timeout
-                    if len(text) > 200:
-                        text = text[:200] + "..."
-                    
-                    logger.info(f"Processing line: {speaker}: {text[:50]}...")
-                    
-                    try:
-                        # Generate audio for each line separately
-                        response = tts_client.models.generate_content(
-                            model='models/gemini-2.5-flash-preview-tts',
-                            contents=text,
-                            config={
-                                "response_modalities": ["AUDIO"]
-                            }
+            # Import types from genai for proper configuration
+            from google.genai import types
+            
+            # Generate audio with multi-speaker configuration
+            response = tts_client.models.generate_content(
+                model='models/gemini-2.5-flash-preview-tts',
+                contents=script,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                            speaker_voice_configs=[
+                                types.SpeakerVoiceConfig(
+                                    speaker='Speaker1',
+                                    voice_config=types.VoiceConfig(
+                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                            voice_name=voice1
+                                        )
+                                    )
+                                ),
+                                types.SpeakerVoiceConfig(
+                                    speaker='Speaker2',
+                                    voice_config=types.VoiceConfig(
+                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                            voice_name=voice2
+                                        )
+                                    )
+                                ),
+                            ]
                         )
-                        
-                        # Extract audio data from this chunk
-                        logger.info(f"Response type: {type(response)}")
-                        logger.info(f"Response attributes: {dir(response)}")
-                        
-                        # Check if response has audio data
-                        if hasattr(response, 'candidates') and response.candidates:
-                            logger.info(f"Found {len(response.candidates)} candidates")
-                            for i, candidate in enumerate(response.candidates):
-                                logger.info(f"Candidate {i} attributes: {dir(candidate)}")
-                                if hasattr(candidate, 'content') and candidate.content:
-                                    logger.info(f"Content attributes: {dir(candidate.content)}")
-                                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
-                                        logger.info(f"Found {len(candidate.content.parts)} parts")
-                                        for j, part in enumerate(candidate.content.parts):
-                                            logger.info(f"Part {j} attributes: {dir(part)}")
-                                            if hasattr(part, 'inline_data') and part.inline_data:
-                                                logger.info(f"Inline data attributes: {dir(part.inline_data)}")
-                                                mime_type = getattr(part.inline_data, 'mime_type', '')
-                                                data_size = len(getattr(part.inline_data, 'data', ''))
-                                                logger.info(f"MIME type: {mime_type}, Data size: {data_size}")
-                                                if 'audio' in mime_type.lower() and data_size > 0:
-                                                    # Get the raw data directly (already bytes from Gemini)
-                                                    audio_data = part.inline_data.data
-                                                    logger.info(f"Raw audio data size: {len(audio_data)} bytes")
-                                                    audio_chunks.append(audio_data)
-                                                    break
-                                        if audio_chunks and len(audio_chunks) > len(audio_chunks) - 1:
-                                            break
-                        else:
-                            logger.warning(f"No candidates found in response or response format unexpected")
-                    except Exception as chunk_error:
-                        logger.warning(f"Failed to generate audio for chunk: {str(chunk_error)}")
-                        continue
+                    )
+                )
+            )
             
-            if not audio_chunks:
-                logger.error("No audio chunks generated")
+            logger.info("Multi-speaker TTS generation completed")
+            
+            # Extract audio data from response
+            audio_data = None
+            if hasattr(response, 'candidates') and response.candidates:
+                logger.info(f"Found {len(response.candidates)} candidates")
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                            logger.info(f"Found {len(candidate.content.parts)} parts")
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    mime_type = getattr(part.inline_data, 'mime_type', '')
+                                    data_size = len(getattr(part.inline_data, 'data', b''))
+                                    logger.info(f"MIME type: {mime_type}, Data size: {data_size}")
+                                    if 'audio' in mime_type.lower() and data_size > 0:
+                                        audio_data = part.inline_data.data
+                                        logger.info(f"Raw audio data size: {len(audio_data)} bytes")
+                                        break
+                            if audio_data:
+                                break
+                    if audio_data:
+                        break
+            else:
+                logger.warning("No candidates found in response")
+            
+            if not audio_data:
+                logger.error("No audio data found in response")
                 return jsonify({'error': '音声データの生成に失敗しました。'}), 500
             
-            # Combine all audio chunks (PCM data)
-            pcm_data = b''.join(audio_chunks)
-            logger.info(f"Generated {len(audio_chunks)} audio chunks, total PCM size: {len(pcm_data)} bytes")
-            
             # Save as WAV file using the wave library
-            save_wave_file(filepath, pcm_data, channels=1, rate=24000, sample_width=2)
+            save_wave_file(filepath, audio_data, channels=1, rate=24000, sample_width=2)
             logger.info(f"Saved WAV file: {filepath}")
                 
         except Exception as speech_error:
@@ -261,10 +257,36 @@ def get_available_voices():
     """Get available voice models"""
     # Available voices for Gemini TTS
     voices = [
-        {'id': 'aoede', 'name': 'Aoede (英語・女性)', 'language': 'en'},
-        {'id': 'charon', 'name': 'Charon (英語・男性)', 'language': 'en'},
-        {'id': 'fenrir', 'name': 'Fenrir (英語・男性)', 'language': 'en'},
-        {'id': 'kore', 'name': 'Kore (英語・女性)', 'language': 'en'}
+        {'id': 'zephyr', 'name': 'Zephyr (男性・明るい)'},
+        {'id': 'puck', 'name': 'Puck (男性・陽気な)'},
+        {'id': 'charon', 'name': 'Charon (男性・解説的な)'},
+        {'id': 'kore', 'name': 'Kore (女性・しっかりした)'},
+        {'id': 'fenrir', 'name': 'Fenrir (男性・熱のこもった)'},
+        {'id': 'leda', 'name': 'Leda (女性・若々しい)'},
+        {'id': 'orus', 'name': 'Orus (男性・しっかりした)'},
+        {'id': 'aoede', 'name': 'Aoede (女性・快活な)'},
+        {'id': 'callirhoe', 'name': 'Callirhoe (女性・のんびりした)'},
+        {'id': 'autonoe', 'name': 'Autonoe (女性・明るい)'},
+        {'id': 'enceladus', 'name': 'Enceladus (男性・息もれ声の)'},
+        {'id': 'iapetus', 'name': 'Iapetus (男性・クリアな)'},
+        {'id': 'umbriel', 'name': 'Umbriel (男性・のんびりした)'},
+        {'id': 'algieba', 'name': 'Algieba (中性/なし・なめらかな)'},
+        {'id': 'despina', 'name': 'Despina (女性・なめらかな)'},
+        {'id': 'erinome', 'name': 'Erinome (女性・クリアな)'},
+        {'id': 'algenib', 'name': 'Algenib (中性/なし・しゃがれ声の)'},
+        {'id': 'rasalgethi', 'name': 'Rasalgethi (中性/なし・解説的な)'},
+        {'id': 'laomedeia', 'name': 'Laomedeia (女性・陽気な)'},
+        {'id': 'achernar', 'name': 'Achernar (中性/なし・ソフトな)'},
+        {'id': 'alnilam', 'name': 'Alnilam (中性/なし・しっかりした)'},
+        {'id': 'schedar', 'name': 'Schedar (中性/なし・落ち着いた)'},
+        {'id': 'gacrux', 'name': 'Gacrux (中性/なし・成熟した)'},
+        {'id': 'pulcherrima', 'name': 'Pulcherrima (女性・張りのある)'},
+        {'id': 'achird', 'name': 'Achird (中性/なし・親しみやすい)'},
+        {'id': 'zubenelgenubi', 'name': 'Zubenelgenubi (中性/なし・くだけた)'},
+        {'id': 'vindemiatrix', 'name': 'Vindemiatrix (女性・穏やかな)'},
+        {'id': 'sadachbia', 'name': 'Sadachbia (中性/なし・活気のある)'},
+        {'id': 'sadaltager', 'name': 'Sadaltager (中性/なし・知的な)'},
+        {'id': 'sulafat', 'name': 'Sulafat (中性/なし・温かい)'}
     ]
     return jsonify({'voices': voices})
 
