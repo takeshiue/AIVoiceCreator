@@ -100,8 +100,8 @@ def generate_audio():
     """Generate audio using Gemini TTS"""
     try:
         logger.info("=== Starting audio generation ===")
-        if not tts_model:
-            return jsonify({'error': 'Google API キーが設定されていないか、TTSクライアントの初期化に失敗しました。'}), 500
+        if not client:
+            return jsonify({'error': 'Google API キーが設定されていないか、クライアントの初期化に失敗しました。'}), 500
 
         data = request.get_json()
         script = data.get('script', '').strip()
@@ -120,33 +120,68 @@ def generate_audio():
         try:
             logger.info(f"Generating audio with voices: Speaker1={voice1}, Speaker2={voice2}")
 
-            # multi-speaker設定を使用して音声合成
-            # この方法は、script内の "Speaker1:", "Speaker2:" といったタグをAPIが解釈することを前提とします
-            response = tts_model.generate_content(
-                contents=script,
-                generation_config=types.GenerationConfig(
-                    # multi-speaker設定は現在、SDKの特定のバージョンや方法で指定する必要があります。
-                    # ここでは text-to-speech モデルのドキュメントに沿った架空の例を示します。
-                    # 実際のSDKの `generate_content` での指定方法に合わせてください。
-                    # 以下はSSMLを使う場合の概念例です。
-                    # ssml=f'<speak><p><voice name="{voice1}">{script_part1}</voice></p><p><voice name="{voice2}">{script_part2}</voice></p></speak>'
-                    # Geminiのマルチモーダルモデルでは、コンテキストから話者を判断することが期待されます。
-                    # ここでは元のコードの意図を汲み、config内で指定する形式で記述します。
-                ),
-                stream=True # stream=Trueでレスポンスを受け取り、チャンクを結合
-            )
+            # Google Text-to-Speech API を使用して実際の音声生成を実装
+            from google.cloud import texttospeech
+            import io
+            
+            try:
+                # Google Cloud Text-to-Speech クライアントを初期化
+                tts_client = texttospeech.TextToSpeechClient()
+                
+                # スクリプトを話者ごとに分割して処理
+                script_lines = script.strip().split('\n')
+                audio_segments = []
+                
+                for line in script_lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # 話者を判定
+                    if line.startswith('Speaker1:'):
+                        text = line.replace('Speaker1:', '').strip()
+                        voice_name = voice1
+                    elif line.startswith('Speaker2:'):
+                        text = line.replace('Speaker2:', '').strip()  
+                        voice_name = voice2
+                    else:
+                        text = line
+                        voice_name = voice1
+                    
+                    if text:
+                        # 音声合成リクエストを作成
+                        synthesis_input = texttospeech.SynthesisInput(text=text)
+                        voice = texttospeech.VoiceSelectionParams(
+                            language_code="ja-JP",
+                            name=voice_name,
+                            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+                        )
+                        audio_config = texttospeech.AudioConfig(
+                            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+                            sample_rate_hertz=44100
+                        )
+                        
+                        # 音声を生成
+                        response = tts_client.synthesize_speech(
+                            input=synthesis_input,
+                            voice=voice,
+                            audio_config=audio_config
+                        )
+                        
+                        audio_segments.append(response.audio_content)
+                
+                # 音声セグメントを結合
+                audio_data = b''.join(audio_segments)
+                logger.info("Successfully generated audio using Google TTS")
+                
+            except ImportError:
+                logger.error("Google Cloud Text-to-Speech library not available")
+                return jsonify({'error': 'TTS機能を使用するにはGoogle Cloud Text-to-Speechライブラリが必要です。'}), 500
+            except Exception as tts_error:
+                logger.error(f"TTS generation failed: {str(tts_error)}")
+                return jsonify({'error': f'音声生成でエラーが発生しました: {str(tts_error)}'}), 500
 
-            # 音声データを結合
-            audio_data = b''
-            for chunk in response:
-                if chunk.audio_content:
-                    audio_data += chunk.audio_content
-
-            if not audio_data:
-                logger.error("No audio data found in response")
-                return jsonify({'error': '音声データの生成に失敗しました。レスポンスに音声が含まれていません。'}), 500
-
-            # 修正点: APIからのバイナリデータをそのままファイルに書き込む
+            # APIからのバイナリデータをファイルに書き込む
             with open(filepath, "wb") as f:
                 f.write(audio_data)
             logger.info(f"Saved audio file: {filepath}")
