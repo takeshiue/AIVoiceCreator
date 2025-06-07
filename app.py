@@ -73,9 +73,10 @@ def generate_script():
 
         # Generate content using Google Gen AI
         try:
-            response = client.generate_content(
+            response = client.models.generate_content(
+                model='models/gemini-2.5-flash-preview-05-20',
                 contents=prompt_text,
-                generation_config={
+                config={
                     'temperature': 0.7,
                     'top_p': 0.8,
                     'max_output_tokens': 2048
