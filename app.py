@@ -4,35 +4,44 @@ import time
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import google.genai as genai
 from google.genai import types
+from google.genai.types import HttpOptions
+import wave
+from dotenv import load_dotenv
 
-# --- 設定項目 ---
-# 定数として設定をまとめることで、管理しやすくなります
-MODEL_TEXT_GENERATION = 'models/gemini-2.5-flash-preview-06-05' # 最新の推奨モデルに変更
-MODEL_TTS = 'models/gemini-2.5-flash-preview-tts' # TTSモデル名
+load_dotenv()
+
+# --- 設定項目 (ご指定のプレビュー版モデルに設定) ---
+MODEL_TEXT_GENERATION = 'models/gemini-2.5-flash-preview-05-20'
+MODEL_TTS = 'models/gemini-2.5-flash-preview-tts'
 AUDIO_DIR = os.path.join('static', 'audio')
-REQUEST_TIMEOUT_SECONDS = 180
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
-# 本番環境では必ず環境変数から強力なシークレットキーを設定してください
+app.config['JSON_AS_ASCII'] = False
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
 
 # Configure Google Gen AI client
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     try:
-        client = genai.Client(api_key=GOOGLE_API_KEY)
-        logger.info("Google AI configured successfully")
+        # タイムアウトをミリ秒で指定
+        http_opts = HttpOptions(timeout=600000) # 10分
+        
+        client = genai.Client(api_key=GOOGLE_API_KEY, http_options=http_opts)
+        
+        logger.info("Google AI configured successfully with a 600,000-millisecond (10 minute) timeout.")
     except Exception as e:
         logger.error(f"Failed to initialize Google AI client: {str(e)}")
         client = None
+        GOOGLE_API_KEY = None
 else:
     logger.warning("GOOGLE_API_KEY not found in environment variables")
     client = None
+    GOOGLE_API_KEY = None
 
 
 # Ensure audio directory exists
@@ -47,8 +56,8 @@ def index():
 def generate_script():
     """Generate interview script using Gemini"""
     try:
-        if not client:
-            return jsonify({'error': 'Google API キーが設定されていません。環境変数 GOOGLE_API_KEY を設定してください。'}), 500
+        if client is None:
+            return jsonify({'error': 'Google API キーが設定されていないか、クライアントの初期化に失敗しました。'}), 500
 
         data = request.get_json()
         constitution = data.get('constitution', '').strip()
@@ -56,7 +65,6 @@ def generate_script():
         if not constitution:
             return jsonify({'error': '構成案を入力してください。'}), 400
 
-        # Create effective prompt for interview script generation
         prompt_text = f"""あなたはプロの放送作家です。以下の構成案に基づいて、自然で魅力的なインタビューのトークスクリプトを Speaker1 と Speaker2 の対話形式で作成してください。
 
 重要な指示：
@@ -71,10 +79,9 @@ def generate_script():
 
 トークスクリプト:"""
 
-        # Generate content using Google Gen AI
         try:
             response = client.models.generate_content(
-                model='models/gemini-2.5-flash-preview-05-20',
+                model=MODEL_TEXT_GENERATION,
                 contents=prompt_text,
                 config={
                     'temperature': 0.7,
@@ -83,11 +90,11 @@ def generate_script():
                 }
             )
             generated_text = response.text
-            logger.info("Script generated successfully")
+            logger.info("Script generated successfully with preview TEXT model")
             return jsonify({'script': generated_text})
 
         except Exception as api_error:
-            logger.error(f"Script generation API error: {str(api_error)}")
+            logger.error(f"Script generation API error: {api_error!r}")
             return jsonify({'error': f'スクリプト生成エラー: {str(api_error)}'}), 500
 
     except Exception as e:
@@ -97,104 +104,106 @@ def generate_script():
 
 @app.route('/api/generate_audio', methods=['POST'])
 def generate_audio():
-    """Generate audio using Gemini TTS"""
+    """
+    Generate multi-speaker audio using 'gemini-2.5-flash-preview-tts'
+    with a correctly configured client-level timeout.
+    """
     try:
-        logger.info("=== Starting audio generation ===")
-        if not client:
+        logger.info("=== Starting audio generation with PREVIEW TTS model (Multi-speaker config) ===")
+        if client is None:
             return jsonify({'error': 'Google API キーが設定されていないか、クライアントの初期化に失敗しました。'}), 500
 
         data = request.get_json()
         script = data.get('script', '').strip()
-        voice1 = data.get('voice1', 'aoede')
-        voice2 = data.get('voice2', 'charon')
-        # rate パラメータはTTSモデル側で制御されるため、ここでは使用しません
+        voice1_name = data.get('voice1', 'kore')
+        voice2_name = data.get('voice2', 'charon')
 
         if not script:
             return jsonify({'error': 'スクリプトを入力してください。'}), 400
 
-        # Generate unique filename
         timestamp = int(time.time())
         filename = f"interview_{timestamp}.wav"
         filepath = os.path.join(AUDIO_DIR, filename)
 
         try:
-            logger.info(f"Generating audio with voices: Speaker1={voice1}, Speaker2={voice2}")
-
-            # シンプルなTTS実装 - テキストをWAVファイルに変換
-            import wave
-            import struct
-            import math
-            
-            logger.info("Generating audio file from script text")
-            
-            # サンプルレート44.1kHz、16ビット、モノラル
-            sample_rate = 44100
-            duration = 2  # 各セリフ2秒
-            
-            # スクリプトを話者ごとに分割
+            # --- 1. Parse script and build prompt with speaker tags ---
             script_lines = script.strip().split('\n')
-            audio_segments = []
-            
+            prompt_parts = []
             for line in script_lines:
                 line = line.strip()
-                if not line:
-                    continue
-                    
-                # 話者を判定
                 if line.startswith('Speaker1:'):
-                    text = line.replace('Speaker1:', '').strip()
-                    frequency = 440  # A音 (Speaker1用)
+                    text = line.replace('Speaker1:', '', 1).strip()
+                    prompt_parts.append(f"<speaker:Speaker1>{text}</speaker:Speaker1>")
                 elif line.startswith('Speaker2:'):
-                    text = line.replace('Speaker2:', '').strip()  
-                    frequency = 523  # C音 (Speaker2用)
-                else:
-                    text = line
-                    frequency = 440
-                
-                if text:
-                    # シンプルなサイン波を生成（実際の音声の代わり）
-                    samples = []
-                    for i in range(int(sample_rate * duration)):
-                        # テキストの長さに基づいて周波数を調整
-                        adjusted_freq = frequency + (len(text) % 100)
-                        sample = int(16384 * math.sin(2 * math.pi * adjusted_freq * i / sample_rate))
-                        samples.append(sample)
-                    
-                    # バイナリデータに変換
-                    audio_segment = b''.join(struct.pack('<h', sample) for sample in samples)
-                    audio_segments.append(audio_segment)
+                    text = line.replace('Speaker2:', '', 1).strip()
+                    prompt_parts.append(f"<speaker:Speaker2>{text}</speaker:Speaker2>")
             
-            if not audio_segments:
-                logger.error("No audio segments generated")
-                return jsonify({'error': '音声データの生成に失敗しました。'}), 500
-            
-            # WAVファイルを作成
-            with wave.open(filepath, 'wb') as wav_file:
-                wav_file.setnchannels(1)  # モノラル
-                wav_file.setsampwidth(2)  # 16ビット
-                wav_file.setframerate(sample_rate)
-                
-                # 全セグメントを結合して書き込み
-                for segment in audio_segments:
-                    wav_file.writeframes(segment)
-            
-            logger.info(f"Successfully generated audio file: {filepath}")
-            
-            # ファイルは既にWAVフォーマットで保存済み
+            final_prompt = "\n".join(prompt_parts)
+            logger.info(f"Generated multi-speaker prompt: {final_prompt}")
 
-            return jsonify({
-                'audio_file_name': filename,
-                'message': '音声生成が完了しました。'
-            })
+            # --- 2. Build the configuration object ---
+            config_object = types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                        speaker_voice_configs=[
+                            types.SpeakerVoiceConfig(
+                                speaker='Speaker1',
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=voice1_name,
+                                    )
+                                )
+                            ),
+                            types.SpeakerVoiceConfig(
+                                speaker='Speaker2',
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=voice2_name,
+                                    )
+                                )
+                            ),
+                        ]
+                    )
+                )
+            )
+
+            # --- 3. Call the API ---
+            logger.info("Sending request to API (client timeout is 600,000 milliseconds)...")
+            response = client.models.generate_content(
+                model=MODEL_TTS,
+                contents=final_prompt,
+                config=config_object
+            )
+            logger.info("API response received.")
+            
+            # ★★★ ここがご指示のあった修正箇所です ★★★
+            # 'audio'属性が存在しないエラーに基づき、'content'属性から音声データを取得します。
+            audio_data = data = response.candidates[0].content.parts[0].inline_data.data
+            
+            if audio_data:
+                with wave.open(filepath, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(24000)
+                    wav_file.writeframes(audio_data)
+
+                logger.info(f"Successfully generated multi-speaker audio file: {filepath}")
+                return jsonify({
+                    'audio_file_name': filename,
+                    'message': 'マルチスピーカー音声の生成が完了しました。'
+                })
+            else:
+                logger.warning("No audio data received from multi-speaker API.")
+                return jsonify({'error': '音声データの生成に失敗しました。APIからのデータがありません。'}), 500
 
         except Exception as speech_error:
-            logger.error(f"Speech generation failed: {str(speech_error)}")
-            return jsonify({'error': f'音声生成中にエラーが発生しました: {str(speech_error)}'}), 500
+            logger.error(f"Multi-speaker speech generation failed: {str(speech_error)}")
+            return jsonify({'error': f'マルチスピーカー音声の生成中にエラーが発生しました: {str(speech_error)}'}), 500
 
     except Exception as e:
         logger.error(f"Error in generate_audio: {str(e)}")
         return jsonify({'error': f'音声生成中に予期せぬエラーが発生しました: {str(e)}'}), 500
-
 
 @app.route('/static/audio/<filename>')
 def serve_audio(filename):
@@ -210,9 +219,7 @@ def serve_audio(filename):
 
 @app.route('/api/voices')
 def get_available_voices():
-    """Get available voice models"""
-    # このリストは静的なのでこのままで問題ありません
-    # APIから動的に取得できる場合は、そのように変更するのが望ましいです
+    """Get available voice models for the preview model"""
     voices = [
         {'id': 'zephyr', 'name': 'Zephyr (男性・明るい)'},
         {'id': 'puck', 'name': 'Puck (男性・陽気な)'},
@@ -244,11 +251,8 @@ def get_available_voices():
         {'id': 'sadachbia', 'name': 'Sadachbia (中性/なし・活気のある)'},
         {'id': 'sadaltager', 'name': 'Sadaltager (中性/なし・知的な)'},
         {'id': 'sulafat', 'name': 'Sulafat (中性/なし・温かい)'}
-        # ... (他のボイス)
     ]
     return jsonify({'voices': voices})
 
 if __name__ == '__main__':
-    # 注意: debug=True は開発環境でのみ使用してください。
-    # 本番環境ではGunicornやuWSGIなどのWSGIサーバーを使用することを強く推奨します。
     app.run(host='0.0.0.0', port=5000, debug=True)

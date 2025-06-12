@@ -52,14 +52,21 @@ class InterviewGenerator {
     }
 
     populateVoiceSelect() {
-        const voiceSelect = document.getElementById('voice_select');
-        voiceSelect.innerHTML = '';
+        const voiceSelect1 = document.getElementById('voice_select_1');
+        const voiceSelect2 = document.getElementById('voice_select_2');
+        voiceSelect1.innerHTML = '';
+        voiceSelect2.innerHTML = '';
         
         this.availableVoices.forEach(voice => {
-            const option = document.createElement('option');
-            option.value = voice.id;
-            option.textContent = voice.name;
-            voiceSelect.appendChild(option);
+            const option1 = document.createElement('option');
+            option1.value = voice.id;
+            option1.textContent = voice.name;
+            voiceSelect1.appendChild(option1);
+
+            const option2 = document.createElement('option');
+            option2.value = voice.id;
+            option2.textContent = voice.name;
+            voiceSelect2.appendChild(option2);
         });
     }
 
